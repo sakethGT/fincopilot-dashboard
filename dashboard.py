@@ -748,14 +748,17 @@ with tab_pf:
 
         # ── KPIs ──────────────────────────────────────────────────────────────
         section_header("Portfolio Overview", GREEN)
-        total_val       = pf.get("total_value_usd", 0)
-        total_invested  = pf.get("total_invested_usd", 0)
-        total_gain      = pf.get("total_gain_loss_usd", 0)
-        total_gain_pct  = pf.get("total_gain_loss_pct", 0)
-        day_chg         = pf.get("day_change_usd", 0)
-        day_chg_pct     = pf.get("day_change_pct", 0)
-        ytd_chg         = pf.get("ytd_change_usd", 0)
-        ytd_chg_pct     = pf.get("ytd_change_pct", 0)
+        total_val      = pf.get("total_value_usd", 0)
+        total_invested = pf.get("total_invested_usd", 0)
+        total_gain     = pf.get("total_gain_loss_usd", 0)
+        total_gain_pct = pf.get("total_gain_loss_pct", 0)
+        day_chg        = pf.get("day_change_usd", 0)
+        day_chg_pct    = pf.get("day_change_pct", 0)
+        ytd_chg        = pf.get("ytd_change_usd", 0)
+        ytd_chg_pct    = pf.get("ytd_change_pct", 0)
+        total_401k     = pf.get("total_401k_usd", 0)
+        total_crypto   = pf.get("total_crypto_usd", 0)
+        cash           = pf.get("cash_usd", 0)
 
         p1, p2, p3, p4 = st.columns(4, gap="medium")
         with p1:
@@ -784,23 +787,18 @@ with tab_pf:
 
         st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
 
-        # ── Allocation donut + Holdings table ─────────────────────────────────
-        section_header("Allocation & Holdings", PURPLE)
+        # ── Allocation donut + 401k breakdown ─────────────────────────────────
+        section_header("Allocation", PURPLE)
 
-        alloc_raw = {
-            "US Equities":    pf.get("us_equities_usd", 0),
-            "India Equities": pf.get("india_equities_usd", 0),
-            "Crypto":         pf.get("crypto_usd", 0),
-            "Cash":           pf.get("cash_usd", 0),
-            "Bonds":          pf.get("bonds_usd", 0),
-        }
-        alloc = {k: v for k, v in alloc_raw.items() if v and v > 0}
-        alloc_colors = [BLUE, TEAL, ORANGE, GREEN, AMBER][:len(alloc)]
+        alloc = {k: v for k, v in {
+            "401(k) Retirement": total_401k,
+            "Crypto":            total_crypto,
+            "Cash":              cash,
+        }.items() if v and v > 0}
+        alloc_colors = [BLUE, ORANGE, GREEN][:len(alloc)]
 
         fig_alloc = go.Figure(go.Pie(
-            labels=list(alloc.keys()),
-            values=list(alloc.values()),
-            hole=0.65,
+            labels=list(alloc.keys()), values=list(alloc.values()), hole=0.65,
             marker=dict(colors=alloc_colors, line=dict(color=BG, width=3)),
             textfont=dict(size=11, color=TEXT1),
             hovertemplate="%{label}: $%{value:,.0f} (%{percent})<extra></extra>",
@@ -812,39 +810,53 @@ with tab_pf:
         )
         fig_alloc.update_layout(
             template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)", height=340,
-            margin=dict(t=40, b=20, l=20, r=80),
-            showlegend=True,
-            legend=dict(orientation="v", x=1.02, y=0.5, font=dict(size=11),
-                        bgcolor="rgba(0,0,0,0)"),
+            plot_bgcolor="rgba(0,0,0,0)", height=320,
+            margin=dict(t=40, b=20, l=20, r=80), showlegend=True,
+            legend=dict(orientation="v", x=1.02, y=0.5, font=dict(size=11), bgcolor="rgba(0,0,0,0)"),
             font=dict(color=TEXT2, family="Inter"),
             title=dict(text="Asset Allocation", font=dict(size=13, color=TEXT2), x=0, pad=dict(l=8)),
         )
 
+        # 401k breakdown bar
+        trowe  = pf.get("troweprice_balance", 0)
+        jhanc  = pf.get("jhancox_balance", 0)
+        fig_401k = go.Figure(go.Bar(
+            x=["T. Rowe Price\n2055 Trust-C", "JHancock 2055\nJLKYX"],
+            y=[trowe, jhanc],
+            marker=dict(color=[BLUE, BLUE2], line=dict(width=0), cornerradius=6),
+            text=[f"${trowe:,.0f}", f"${jhanc:,.0f}"],
+            textposition="outside", textfont=dict(color=TEXT1, size=11), cliponaxis=False,
+        ))
+        chart_layout(fig_401k, "401(k) Balances", 320,
+                     yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=False,
+                                tickprefix="$", tickformat=",.0f", tickfont=dict(size=10, color=TEXT3)))
+
+        pa, pb = st.columns(2, gap="medium")
+        chart_card(fig_alloc, pa)
+        chart_card(fig_401k, pb)
+
+        st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+        # ── Crypto holdings table + P&L bar ───────────────────────────────────
+        section_header("Crypto Holdings  ·  SOL · DOGE · AVAX · WIF", ORANGE)
         holdings = pf.get("holdings", [])
-        pa, pb = st.columns([1, 1.4], gap="medium")
-        with pa:
-            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.plotly_chart(fig_alloc, use_container_width=True, config={"displayModeBar": False})
-            st.markdown('</div>', unsafe_allow_html=True)
-        with pb:
-            if holdings:
-                df_h = pd.DataFrame(holdings)
-                for col in ["value_usd", "gain_loss_pct", "current_price"]:
-                    if col not in df_h.columns:
-                        df_h[col] = 0
-                disp_cols = [c for c in ["ticker", "name", "value_usd", "current_price", "gain_loss_pct"] if c in df_h.columns]
-                df_h = df_h[disp_cols].copy()
-                rename = {"ticker":"Ticker","name":"Name","value_usd":"Value (USD)",
-                          "current_price":"Price","gain_loss_pct":"P&L %"}
-                df_h.rename(columns=rename, inplace=True)
-                if "Value (USD)" in df_h.columns:
-                    df_h["Value (USD)"] = pd.to_numeric(df_h["Value (USD)"], errors="coerce").apply(
-                        lambda x: f"${x:,.0f}" if pd.notna(x) else "—")
-                if "Price" in df_h.columns:
-                    df_h["Price"] = pd.to_numeric(df_h["Price"], errors="coerce").apply(
-                        lambda x: f"${x:,.2f}" if pd.notna(x) else "—")
-                df_h["P&L %"] = pd.to_numeric(df_h["P&L %"], errors="coerce")
+
+        if holdings:
+            df_h = pd.DataFrame(holdings)
+            for col in ["value_usd", "gain_loss_pct", "current_price", "avg_cost", "units"]:
+                if col not in df_h.columns:
+                    df_h[col] = 0
+            df_h["gain_loss_pct"] = pd.to_numeric(df_h["gain_loss_pct"], errors="coerce")
+
+            pc, pd_ = st.columns([1.4, 1], gap="medium")
+            with pc:
+                disp = df_h[["ticker","name","units","avg_cost","current_price","value_usd","gain_loss_pct"]].copy()
+                disp.columns = ["Ticker","Name","Units","Avg Cost","Price","Value (USD)","P&L %"]
+                for c in ["Avg Cost","Price"]:
+                    disp[c] = pd.to_numeric(disp[c], errors="coerce").apply(
+                        lambda x: f"${x:,.4f}" if (pd.notna(x) and x < 10) else (f"${x:,.2f}" if pd.notna(x) else "—"))
+                disp["Value (USD)"] = pd.to_numeric(disp["Value (USD)"], errors="coerce").apply(
+                    lambda x: f"${x:,.0f}" if pd.notna(x) else "—")
 
                 def color_pnl(col):
                     return [f"color:{GREEN};font-weight:600" if (v >= 0 if pd.notna(v) else False)
@@ -852,29 +864,24 @@ with tab_pf:
 
                 st.markdown('<div class="chart-card" style="padding:0;">', unsafe_allow_html=True)
                 st.dataframe(
-                    table_style(df_h)
-                    .apply(color_pnl, subset=["P&L %"])
+                    table_style(disp).apply(color_pnl, subset=["P&L %"])
                     .format({"P&L %": lambda x: f"{x:+.2f}%" if pd.notna(x) else "—"}),
-                    use_container_width=True, height=340,
+                    use_container_width=True, height=220,
                 )
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # ── Holdings P&L bar chart ─────────────────────────────────────────────
-        if holdings:
-            section_header("Holdings P&L", AMBER)
-            df_pnl = pd.DataFrame(holdings)
-            if "gain_loss_pct" in df_pnl.columns and "ticker" in df_pnl.columns:
-                df_pnl["gain_loss_pct"] = pd.to_numeric(df_pnl["gain_loss_pct"], errors="coerce").fillna(0)
-                df_pnl = df_pnl.sort_values("gain_loss_pct")
-                bar_colors = [GREEN if v >= 0 else RED for v in df_pnl["gain_loss_pct"]]
+            with pd_:
+                df_pnl = df_h.sort_values("gain_loss_pct")
+                bar_colors = [GREEN if v >= 0 else RED for v in df_pnl["gain_loss_pct"].fillna(0)]
                 fig_pnl = go.Figure(go.Bar(
                     x=df_pnl["ticker"], y=df_pnl["gain_loss_pct"],
                     marker=dict(color=bar_colors, line=dict(width=0), cornerradius=6),
-                    text=[f"{v:+.2f}%" for v in df_pnl["gain_loss_pct"]],
+                    text=[f"{v:+.1f}%" for v in df_pnl["gain_loss_pct"].fillna(0)],
                     textposition="outside", textfont=dict(color=TEXT1, size=11), cliponaxis=False,
                 ))
                 fig_pnl.add_hline(y=0, line_color=BORDER2, line_width=1.5)
-                chart_layout(fig_pnl, "Gain / Loss % by Position", 300,
+                chart_layout(fig_pnl, "Crypto P&L %", 220,
+                             margin=dict(t=40, b=40, l=10, r=10),
                              yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=False,
                                         ticksuffix="%", tickfont=dict(size=10, color=TEXT3)))
                 st.markdown('<div class="chart-card">', unsafe_allow_html=True)
@@ -906,27 +913,29 @@ with tab_pf:
                          yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=False,
                                     tickprefix="$", tickformat=",.0f",
                                     tickfont=dict(size=10, color=TEXT3)))
-            fig_phist.update_layout(
-                legend=dict(orientation="h", y=-0.12, font=dict(size=11),
-                            bgcolor="rgba(0,0,0,0)"))
+            fig_phist.update_layout(legend=dict(orientation="h", y=-0.12, font=dict(size=11),
+                                                bgcolor="rgba(0,0,0,0)"))
 
-            fig_daychange = go.Figure()
-            if "day_change_pct" in hp.columns:
-                dchg = pd.to_numeric(hp["day_change_pct"], errors="coerce").fillna(0)
-                bar_dc = [GREEN if v >= 0 else RED for v in dchg]
-                fig_daychange.add_trace(go.Bar(
-                    x=hp["date"], y=dchg,
-                    marker=dict(color=bar_dc, line=dict(width=0), cornerradius=3),
-                    name="Daily Change %",
-                ))
-            fig_daychange.add_hline(y=0, line_color=BORDER2, line_width=1)
-            chart_layout(fig_daychange, "Daily Change %", 280,
+            # 401k vs crypto split over time
+            fig_split = go.Figure()
+            for col, label, color in [("total_401k_usd","401(k)",BLUE),
+                                       ("total_crypto_usd","Crypto",ORANGE)]:
+                if col in hp.columns:
+                    fig_split.add_trace(go.Scatter(
+                        x=hp["date"], y=pd.to_numeric(hp[col], errors="coerce"),
+                        name=label, line=dict(color=color, width=2),
+                        mode="lines+markers", marker=dict(size=7),
+                    ))
+            chart_layout(fig_split, "401(k) vs Crypto Over Time", 320,
                          yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=False,
-                                    ticksuffix="%", tickfont=dict(size=10, color=TEXT3)))
+                                    tickprefix="$", tickformat=",.0f",
+                                    tickfont=dict(size=10, color=TEXT3)))
+            fig_split.update_layout(legend=dict(orientation="h", y=-0.12, font=dict(size=11),
+                                                bgcolor="rgba(0,0,0,0)"))
 
             ph1, ph2 = st.columns(2, gap="medium")
             chart_card(fig_phist, ph1)
-            chart_card(fig_daychange, ph2)
+            chart_card(fig_split, ph2)
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
