@@ -224,7 +224,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ── Tabs ───────────────────────────────────────────────────────────────────────
-tab_re, tab_mkt = st.tabs(["🏠  Real Estate", "📊  Market Analysis"])
+tab_re, tab_mkt, tab_pf = st.tabs(["🏠  Real Estate", "📊  Market Analysis", "💼  Portfolio"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — REAL ESTATE
@@ -725,13 +725,216 @@ with tab_mkt:
             st.plotly_chart(fig_rates, use_container_width=True, config={"displayModeBar": False})
             st.markdown('</div>', unsafe_allow_html=True)
 
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 3 — PORTFOLIO
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_pf:
+    pf = load_latest("Portfolio", "portfolio-snapshot")
+    hist_pf = load_history("Portfolio", "portfolio-snapshot", "date")
+
+    if not pf:
+        st.error("No portfolio-snapshot data found in Analysis/Portfolio/")
+    else:
+        pf_date = str(pf.get("date", ""))
+
+        st.markdown(f"""
+        <div style="display:flex; align-items:center; gap:10px; margin:1rem 0 1.5rem;">
+          <span style="color:{TEXT2}; font-size:0.72rem; letter-spacing:0.1em;
+                       text-transform:uppercase; font-weight:600;">Snapshot</span>
+          <span style="background:{CARD2}; border:1px solid {BORDER2}; color:{TEXT2};
+                       font-size:0.7rem; font-weight:700; padding:3px 10px;
+                       border-radius:20px; letter-spacing:0.1em;">{pf_date}</span>
+        </div>""", unsafe_allow_html=True)
+
+        # ── KPIs ──────────────────────────────────────────────────────────────
+        section_header("Portfolio Overview", GREEN)
+        total_val       = pf.get("total_value_usd", 0)
+        total_invested  = pf.get("total_invested_usd", 0)
+        total_gain      = pf.get("total_gain_loss_usd", 0)
+        total_gain_pct  = pf.get("total_gain_loss_pct", 0)
+        day_chg         = pf.get("day_change_usd", 0)
+        day_chg_pct     = pf.get("day_change_pct", 0)
+        ytd_chg         = pf.get("ytd_change_usd", 0)
+        ytd_chg_pct     = pf.get("ytd_change_pct", 0)
+
+        p1, p2, p3, p4 = st.columns(4, gap="medium")
+        with p1:
+            st.markdown(kpi("blue", "💼", "Total Value",
+                f"${total_val:,.0f}" if total_val else "—",
+                f"Invested ${total_invested:,.0f}", "neu"), unsafe_allow_html=True)
+        with p2:
+            gain_cls = "pos" if total_gain >= 0 else "neg"
+            gain_icon = "▲" if total_gain >= 0 else "▼"
+            st.markdown(kpi("green" if total_gain >= 0 else "red",
+                "📈" if total_gain >= 0 else "📉", "All-Time Gain / Loss",
+                f"${total_gain:+,.0f}" if total_gain else "—",
+                f"{gain_icon} {abs(total_gain_pct):.2f}%", gain_cls), unsafe_allow_html=True)
+        with p3:
+            day_cls = "pos" if day_chg >= 0 else "neg"
+            day_icon = "▲" if day_chg >= 0 else "▼"
+            st.markdown(kpi("green" if day_chg >= 0 else "red", "📅", "Today's Change",
+                f"${day_chg:+,.0f}" if day_chg else "—",
+                f"{day_icon} {abs(day_chg_pct):.2f}% day", day_cls), unsafe_allow_html=True)
+        with p4:
+            ytd_cls = "pos" if ytd_chg >= 0 else "neg"
+            ytd_icon = "▲" if ytd_chg >= 0 else "▼"
+            st.markdown(kpi("teal", "📆", "YTD Change",
+                f"${ytd_chg:+,.0f}" if ytd_chg else "—",
+                f"{ytd_icon} {abs(ytd_chg_pct):.2f}% YTD", ytd_cls), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+
+        # ── Allocation donut + Holdings table ─────────────────────────────────
+        section_header("Allocation & Holdings", PURPLE)
+
+        alloc_raw = {
+            "US Equities":    pf.get("us_equities_usd", 0),
+            "India Equities": pf.get("india_equities_usd", 0),
+            "Crypto":         pf.get("crypto_usd", 0),
+            "Cash":           pf.get("cash_usd", 0),
+            "Bonds":          pf.get("bonds_usd", 0),
+        }
+        alloc = {k: v for k, v in alloc_raw.items() if v and v > 0}
+        alloc_colors = [BLUE, TEAL, ORANGE, GREEN, AMBER][:len(alloc)]
+
+        fig_alloc = go.Figure(go.Pie(
+            labels=list(alloc.keys()),
+            values=list(alloc.values()),
+            hole=0.65,
+            marker=dict(colors=alloc_colors, line=dict(color=BG, width=3)),
+            textfont=dict(size=11, color=TEXT1),
+            hovertemplate="%{label}: $%{value:,.0f} (%{percent})<extra></extra>",
+        ))
+        fig_alloc.add_annotation(
+            text=f"<b>${total_val:,.0f}</b><br><span style='font-size:10px'>Total</span>",
+            x=0.5, y=0.5, xref="paper", yref="paper",
+            showarrow=False, font=dict(size=15, color=TEXT1, family="Inter"), align="center",
+        )
+        fig_alloc.update_layout(
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)", height=340,
+            margin=dict(t=40, b=20, l=20, r=80),
+            showlegend=True,
+            legend=dict(orientation="v", x=1.02, y=0.5, font=dict(size=11),
+                        bgcolor="rgba(0,0,0,0)"),
+            font=dict(color=TEXT2, family="Inter"),
+            title=dict(text="Asset Allocation", font=dict(size=13, color=TEXT2), x=0, pad=dict(l=8)),
+        )
+
+        holdings = pf.get("holdings", [])
+        pa, pb = st.columns([1, 1.4], gap="medium")
+        with pa:
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.plotly_chart(fig_alloc, use_container_width=True, config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+        with pb:
+            if holdings:
+                df_h = pd.DataFrame(holdings)
+                for col in ["value_usd", "gain_loss_pct", "current_price"]:
+                    if col not in df_h.columns:
+                        df_h[col] = 0
+                disp_cols = [c for c in ["ticker", "name", "value_usd", "current_price", "gain_loss_pct"] if c in df_h.columns]
+                df_h = df_h[disp_cols].copy()
+                rename = {"ticker":"Ticker","name":"Name","value_usd":"Value (USD)",
+                          "current_price":"Price","gain_loss_pct":"P&L %"}
+                df_h.rename(columns=rename, inplace=True)
+                if "Value (USD)" in df_h.columns:
+                    df_h["Value (USD)"] = pd.to_numeric(df_h["Value (USD)"], errors="coerce").apply(
+                        lambda x: f"${x:,.0f}" if pd.notna(x) else "—")
+                if "Price" in df_h.columns:
+                    df_h["Price"] = pd.to_numeric(df_h["Price"], errors="coerce").apply(
+                        lambda x: f"${x:,.2f}" if pd.notna(x) else "—")
+                df_h["P&L %"] = pd.to_numeric(df_h["P&L %"], errors="coerce")
+
+                def color_pnl(col):
+                    return [f"color:{GREEN};font-weight:600" if (v >= 0 if pd.notna(v) else False)
+                            else f"color:{RED};font-weight:600" for v in col]
+
+                st.markdown('<div class="chart-card" style="padding:0;">', unsafe_allow_html=True)
+                st.dataframe(
+                    table_style(df_h)
+                    .apply(color_pnl, subset=["P&L %"])
+                    .format({"P&L %": lambda x: f"{x:+.2f}%" if pd.notna(x) else "—"}),
+                    use_container_width=True, height=340,
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        # ── Holdings P&L bar chart ─────────────────────────────────────────────
+        if holdings:
+            section_header("Holdings P&L", AMBER)
+            df_pnl = pd.DataFrame(holdings)
+            if "gain_loss_pct" in df_pnl.columns and "ticker" in df_pnl.columns:
+                df_pnl["gain_loss_pct"] = pd.to_numeric(df_pnl["gain_loss_pct"], errors="coerce").fillna(0)
+                df_pnl = df_pnl.sort_values("gain_loss_pct")
+                bar_colors = [GREEN if v >= 0 else RED for v in df_pnl["gain_loss_pct"]]
+                fig_pnl = go.Figure(go.Bar(
+                    x=df_pnl["ticker"], y=df_pnl["gain_loss_pct"],
+                    marker=dict(color=bar_colors, line=dict(width=0), cornerradius=6),
+                    text=[f"{v:+.2f}%" for v in df_pnl["gain_loss_pct"]],
+                    textposition="outside", textfont=dict(color=TEXT1, size=11), cliponaxis=False,
+                ))
+                fig_pnl.add_hline(y=0, line_color=BORDER2, line_width=1.5)
+                chart_layout(fig_pnl, "Gain / Loss % by Position", 300,
+                             yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=False,
+                                        ticksuffix="%", tickfont=dict(size=10, color=TEXT3)))
+                st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                st.plotly_chart(fig_pnl, use_container_width=True, config={"displayModeBar": False})
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        # ── Portfolio history ──────────────────────────────────────────────────
+        if len(hist_pf) > 1:
+            section_header("Portfolio History", TEAL)
+            hp = hist_pf.sort_values("date").copy()
+            hp["date"] = hp["date"].astype(str)
+
+            fig_phist = go.Figure()
+            if "total_value_usd" in hp.columns:
+                vals = pd.to_numeric(hp["total_value_usd"], errors="coerce")
+                fig_phist.add_trace(go.Scatter(
+                    x=hp["date"], y=vals, name="Portfolio Value",
+                    line=dict(color=GREEN, width=2.5), mode="lines+markers",
+                    marker=dict(size=8, color=GREEN),
+                    fill="tozeroy", fillcolor="rgba(16,185,129,0.06)",
+                ))
+            if "total_invested_usd" in hp.columns:
+                invested = pd.to_numeric(hp["total_invested_usd"], errors="coerce")
+                fig_phist.add_trace(go.Scatter(
+                    x=hp["date"], y=invested, name="Cost Basis",
+                    line=dict(color=BORDER2, width=1.5, dash="dot"), mode="lines",
+                ))
+            chart_layout(fig_phist, "Portfolio Value vs Cost Basis", 320,
+                         yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=False,
+                                    tickprefix="$", tickformat=",.0f",
+                                    tickfont=dict(size=10, color=TEXT3)))
+            fig_phist.update_layout(
+                legend=dict(orientation="h", y=-0.12, font=dict(size=11),
+                            bgcolor="rgba(0,0,0,0)"))
+
+            fig_daychange = go.Figure()
+            if "day_change_pct" in hp.columns:
+                dchg = pd.to_numeric(hp["day_change_pct"], errors="coerce").fillna(0)
+                bar_dc = [GREEN if v >= 0 else RED for v in dchg]
+                fig_daychange.add_trace(go.Bar(
+                    x=hp["date"], y=dchg,
+                    marker=dict(color=bar_dc, line=dict(width=0), cornerradius=3),
+                    name="Daily Change %",
+                ))
+            fig_daychange.add_hline(y=0, line_color=BORDER2, line_width=1)
+            chart_layout(fig_daychange, "Daily Change %", 280,
+                         yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=False,
+                                    ticksuffix="%", tickfont=dict(size=10, color=TEXT3)))
+
+            ph1, ph2 = st.columns(2, gap="medium")
+            chart_card(fig_phist, ph1)
+            chart_card(fig_daychange, ph2)
+
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <div style="margin-top:3rem; padding-top:1.5rem;
             border-top:1px solid {BORDER};
             display:flex; justify-content:space-between; align-items:center;">
   <span style="color:{TEXT3}; font-size:0.7rem; letter-spacing:0.06em;">
-    DATA &nbsp;·&nbsp; Analysis/Real Estate/ &nbsp;·&nbsp; Analysis/Market/
+    DATA &nbsp;·&nbsp; Analysis/Real Estate/ &nbsp;·&nbsp; Analysis/Market/ &nbsp;·&nbsp; Analysis/Portfolio/
   </span>
   <span style="color:{TEXT3}; font-size:0.7rem; letter-spacing:0.06em;">
     Streamlit + Plotly
