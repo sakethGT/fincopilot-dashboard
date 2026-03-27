@@ -3,9 +3,11 @@ Finance Vault Dashboard — Streamlit + Plotly
 Reads YAML frontmatter from Obsidian vault markdown files.
 """
 
+import base64
 import re
 from pathlib import Path
 import yaml
+import requests
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
@@ -127,6 +129,64 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 VAULT_ROOT = Path(__file__).parent
+
+# ── Private data repo (portfolio snapshots) ─────────────────────────────────────
+_PRIVATE_REPO = "sakethGT/fincopilot-data"
+_PRIVATE_FOLDER = "Portfolio"
+
+@st.cache_data(ttl=3600)
+def _fetch_private_portfolio() -> list[dict]:
+    """
+    Fetch portfolio snapshot files from the private GitHub repo using GITHUB_TOKEN.
+    Falls back to local filesystem (for local dev without a token).
+    """
+    token = st.secrets.get("GITHUB_TOKEN") if hasattr(st, "secrets") else None
+    if not token:
+        # Local dev fallback — read from local vault copy if present
+        local_dir = VAULT_ROOT / "Analysis" / "Portfolio"
+        if local_dir.exists():
+            rows = []
+            for f in sorted(local_dir.glob("*.md")):
+                fm = parse_frontmatter(f)
+                if fm.get("type") == "portfolio-snapshot":
+                    rows.append(fm)
+            return rows
+        return []
+
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    api = f"https://api.github.com/repos/{_PRIVATE_REPO}/contents/{_PRIVATE_FOLDER}"
+    resp = requests.get(api, headers=headers, timeout=10)
+    if resp.status_code != 200:
+        return []
+
+    rows = []
+    for item in sorted(resp.json(), key=lambda x: x["name"]):
+        if not item["name"].endswith(".md"):
+            continue
+        file_resp = requests.get(item["url"], headers=headers, timeout=10)
+        if file_resp.status_code != 200:
+            continue
+        content = base64.b64decode(file_resp.json()["content"]).decode("utf-8")
+        m = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
+        if m:
+            try:
+                fm = yaml.safe_load(m.group(1)) or {}
+                if fm.get("type") == "portfolio-snapshot":
+                    rows.append(fm)
+            except yaml.YAMLError:
+                pass
+    return rows
+
+def load_portfolio_latest() -> dict:
+    rows = _fetch_private_portfolio()
+    return rows[-1] if rows else {}
+
+def load_portfolio_history() -> pd.DataFrame:
+    rows = _fetch_private_portfolio()
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def parse_frontmatter(path: Path) -> dict:
@@ -729,11 +789,11 @@ with tab_mkt:
 # TAB 3 — PORTFOLIO
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_pf:
-    pf = load_latest("Portfolio", "portfolio-snapshot")
-    hist_pf = load_history("Portfolio", "portfolio-snapshot", "date")
+    pf = load_portfolio_latest()
+    hist_pf = load_portfolio_history()
 
     if not pf:
-        st.error("No portfolio-snapshot data found in Analysis/Portfolio/")
+        st.error("No portfolio data found. Set GITHUB_TOKEN in Streamlit secrets.")
     else:
         pf_date = str(pf.get("date", ""))
 
