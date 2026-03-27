@@ -16,8 +16,15 @@ import requests
 # ---------------------------------------------------------------------------
 # API keys — prefer environment variables, fall back to hardcoded values
 # ---------------------------------------------------------------------------
-FINNHUB_KEY = os.environ.get("FINNHUB_KEY", "d737hnpr01qjjol21cn0d737hnpr01qjjol21cng")
-FMP_KEY = os.environ.get("FMP_KEY", "w0Q2UP0Zzzb1A8uLRVPfBmBOlsN4gKe8")
+FINNHUB_KEY = os.environ.get("FINNHUB_KEY")
+FMP_KEY = os.environ.get("FMP_KEY")
+
+if not FINNHUB_KEY or not FMP_KEY:
+    raise EnvironmentError(
+        "Missing API keys. Set FINNHUB_KEY and FMP_KEY as environment variables.\n"
+        "Local: copy .env.example to .env and fill in your keys, then: export $(cat .env)\n"
+        "GitHub Actions: add them as repository secrets."
+    )
 
 REPO_ROOT = Path(__file__).parent
 OUTPUT_DIR = REPO_ROOT / "Analysis" / "Market"
