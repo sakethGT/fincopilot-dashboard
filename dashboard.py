@@ -140,7 +140,10 @@ def _fetch_private_portfolio() -> list[dict]:
     Fetch portfolio snapshot files from the private GitHub repo using GITHUB_TOKEN.
     Falls back to local filesystem (for local dev without a token).
     """
-    token = st.secrets.get("GITHUB_TOKEN") if hasattr(st, "secrets") else None
+    try:
+        token = st.secrets.get("GITHUB_TOKEN")
+    except Exception:
+        token = None
     if not token:
         # Local dev fallback — read from local vault copy if present
         local_dir = VAULT_ROOT / "Analysis" / "Portfolio"
