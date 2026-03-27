@@ -616,34 +616,42 @@ with tab_mkt:
                      yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=False,
                                 tickprefix="$", tickfont=dict(size=10, color=TEXT3)))
 
-        # Fear & Greed gauge
+        # Fear & Greed — horizontal progress bar chart
         fg_val = mkt.get("crypto_fear_greed", 50)
-        fig_fg = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=fg_val,
-            domain={"x": [0,1], "y": [0,1]},
-            title={"text": "Fear & Greed Index", "font": {"color": TEXT2, "size": 13}},
-            number={"font": {"color": TEXT1, "size": 48}},
-            gauge={
-                "axis": {"range": [0,100], "tickfont": {"color": TEXT3, "size": 9},
-                         "tickcolor": TEXT3, "linecolor": BORDER},
-                "bar": {"color": AMBER if 30 <= fg_val <= 60 else (GREEN if fg_val > 60 else RED),
-                        "thickness": 0.25},
-                "bgcolor": CARD2,
-                "bordercolor": BORDER,
-                "steps": [
-                    {"range": [0,25],  "color": "rgba(244,63,94,0.15)"},
-                    {"range": [25,45], "color": "rgba(251,146,60,0.1)"},
-                    {"range": [45,55], "color": "rgba(245,158,11,0.1)"},
-                    {"range": [55,75], "color": "rgba(45,212,191,0.1)"},
-                    {"range": [75,100],"color": "rgba(16,185,129,0.15)"},
-                ],
-                "threshold": {"line": {"color": TEXT1, "width": 2}, "thickness": 0.75, "value": fg_val},
-            }
-        ))
+        fg_color = RED if fg_val < 30 else (GREEN if fg_val > 60 else AMBER)
+        fg_label = ("Extreme Fear" if fg_val < 25 else "Fear" if fg_val < 45
+                    else "Neutral" if fg_val < 55 else "Greed" if fg_val < 75 else "Extreme Greed")
+        zones = [("Extreme Fear",25,RED), ("Fear",20,"#fb923c"),
+                 ("Neutral",10,AMBER), ("Greed",20,TEAL), ("Extreme Greed",25,GREEN)]
+        fig_fg = go.Figure()
+        x_pos = 0
+        for zone_label, width, color in zones:
+            fig_fg.add_trace(go.Bar(
+                x=[width], y=[""], orientation="h",
+                marker=dict(color=color, opacity=0.25, line=dict(width=0)),
+                name=zone_label, showlegend=True,
+                text=[""], hovertemplate=f"{zone_label}<extra></extra>",
+            ))
+            x_pos += width
+        # Needle
+        fig_fg.add_vline(x=fg_val, line_color=TEXT1, line_width=3)
+        fig_fg.add_annotation(
+            x=fg_val, y=0.6, text=f"<b>{fg_val}</b><br>{fg_label}",
+            font=dict(color=fg_color, size=14), showarrow=False, yref="paper",
+        )
         fig_fg.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", font=dict(color=TEXT2, family="Inter"),
-            height=300, margin=dict(t=40, b=20, l=30, r=30),
+            template="plotly_dark", barmode="stack",
+            title=dict(text="Fear & Greed Index", font=dict(size=13, color=TEXT2), x=0, pad=dict(l=8)),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            height=300, margin=dict(t=48, b=16, l=16, r=16),
+            xaxis=dict(range=[0,100], showgrid=False, zeroline=False,
+                       tickvals=[0,25,45,55,75,100],
+                       ticktext=["0","Ext Fear","Fear","Neutral","Greed","100"],
+                       tickfont=dict(size=9, color=TEXT3)),
+            yaxis=dict(showticklabels=False, showgrid=False),
+            legend=dict(orientation="h", y=-0.25, font=dict(size=10),
+                        bgcolor="rgba(0,0,0,0)"),
+            font=dict(color=TEXT2, family="Inter"),
         )
 
         mc, md = st.columns(2, gap="medium")
