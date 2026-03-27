@@ -665,13 +665,13 @@ with tab_mkt:
         section_header("Rates & Yields", GREEN)
 
         rates = {
-            "10-yr Treasury":  mkt.get("ten_yr_yield", 0),
-            "BTC Dominance %": mkt.get("btc_dominance", 0),
+            "10-yr Treasury":  mkt.get("ten_yr_yield") or 0,
+            "BTC Dominance %": mkt.get("btc_dominance") or 0,
         }
         fig_rates = go.Figure(go.Bar(
             x=list(rates.keys()), y=list(rates.values()),
             marker=dict(color=[GREEN, ORANGE], line=dict(width=0), cornerradius=6),
-            text=[f"{v:.2f}%" for v in rates.values()],
+            text=[f"{v:.2f}%" if v is not None else "N/A" for v in rates.values()],
             textposition="outside", textfont=dict(color=TEXT1, size=12), cliponaxis=False,
         ))
         chart_layout(fig_rates, "Key Rates & Dominance", 280,
